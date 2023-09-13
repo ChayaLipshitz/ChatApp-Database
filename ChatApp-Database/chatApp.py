@@ -1,7 +1,10 @@
 from flask import Flask, render_template, request, redirect, session 
+import mysql.connector
+from mysql.connector import Error
 import csv
 import os
 import base64
+import json 
 from datetime import datetime
 server = Flask(__name__)
 
@@ -10,27 +13,13 @@ server = Flask(__name__)
 os.environ["ROOM_PATH"] = "./rooms"
 server.secret_key="123"
 
-def chechUserExist(username,password):
-   with open('users.csv', "r") as usersExist:
-        users=csv.reader(usersExist)
-        for user in users:
-            if(user[0] == username and decode_password(user[1]) == password):
-                return True 
-        return False 
 
-#encode password
-def encode_password(user_pass):
-    pass_bytes = user_pass.encode('ascii')
-    base64_bytes = base64.b64encode(pass_bytes)
-    base64_message = base64_bytes.decode('ascii')
-    return base64_message
+@server.route("/", methods=['GET','POST'])
+def index(): 
+    query_without_get("USE db; INSERT INTO users(name, password) VALUES ('user_from_python', 1234);")
+    return query_with_get(" use db; Select * from users;")
+    return redirect('/register')
 
-#decode password
-def decode_password(user_pass):
-    base64_bytes = user_pass.encode('ascii')
-    pass_bytes = base64.b64decode(base64_bytes)
-    user_pass = pass_bytes.decode('ascii')
-    return user_pass
 
 @server.route("/login", methods=['GET','POST'])
 def login():
@@ -108,6 +97,58 @@ def manage_chat(room):
             content = f.read() 
             f.close()
     return content
+
+
+def chechUserExist(username,password):
+    my_query = "Select name from users where password = 1234 ;"
+    users = query_with_get(my_query)
+    for user in users:
+        if(user[0] == username and decode_password(user[1]) == password):
+            return True 
+    return False 
+#    with open('users.csv', "r") as usersExist:
+#         users=csv.reader(usersExist)
+        # for user in users:
+        #     if(user[0] == username and decode_password(user[1]) == password):
+        #         return True 
+        # return False 
+
+#encode password
+def encode_password(user_pass):
+    pass_bytes = user_pass.encode('ascii')
+    base64_bytes = base64.b64encode(pass_bytes)
+    base64_message = base64_bytes.decode('ascii')
+    return base64_message
+
+#decode password
+def decode_password(user_pass):
+    base64_bytes = user_pass.encode('ascii')
+    pass_bytes = base64.b64decode(base64_bytes)
+    user_pass = pass_bytes.decode('ascii')
+    return user_pass
+
+def query_with_get(my_query):    
+    connection = mysql.connector.connect(
+    user='root', password='test', host='mysql', port="3306", database='db')
+    print("DB connected")
+    cursor = connection.cursor()
+    cursor.execute(my_query)
+    result = cursor.fetchall()
+    cursor.close()
+    connection.close()
+    return str(result)
+
+def query_without_get(my_query):
+    connection = mysql.connector.connect(
+    user='root', password='test', host='mysql', port="3306", database='db')
+    print("DB connected")
+    cursor = connection.cursor()
+    cursor.execute(my_query)
+    result = cursor.fetchall()
+    cursor.close()
+    connection.close()
+    return str(result)
+
     
 if __name__ == "__main__":
     server.run(host='0.0.0.0')

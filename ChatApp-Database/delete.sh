@@ -12,11 +12,3 @@ docker volume remove my-volume
 # Remove all images
 docker rmi -f $(docker images -a -q)
 
-# # stop command:
-
-# docker stop mysql-container
-
-# # delete command:
-
-# docker rm mysql-container
-
