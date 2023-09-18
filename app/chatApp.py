@@ -1,75 +1,97 @@
-from flask import Flask, render_template, request, redirect, session 
+from flask import Flask, render_template, request, redirect, session , jsonify
 import mysql.connector
 from mysql.connector import Error
 import csv
 import os
 import base64
-import json 
 from datetime import datetime
 server = Flask(__name__)
 
-#server.config['static_folder'] = 'CHATAPP/static'
-#define env variable
 os.environ["ROOM_PATH"] = "./rooms"
 server.secret_key="123"
 
 
 @server.route("/", methods=['GET','POST'])
 def index(): 
-    query_without_get("USE db; INSERT INTO users(name, password) VALUES ('user_from_python', 1234);")
-    return query_with_get(" use db; Select * from users;")
     return redirect('/register')
-
-
-@server.route("/login", methods=['GET','POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        if(chechUserExist(username, password)):
-            session['username'] = username
-            return redirect('lobby')
-        else:
-            #return redirect('error/'+ static_folder) #"wrong usernaname or pass" + str(static_folder)       
-            return "wrong usernaname or password"       
-    return render_template('login.html')
 
 @server.route("/register", methods=['GET','POST'])
 def register():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        if(chechUserExist(username, password)):
+        if(checkUserExist(username, password)):
             return "username and pass already exist"
         else:
             encrypted_password = encode_password(password)
-        #כתיבה לקובץ
-            with open("users.csv", 'w') as file:
-                writer = csv.writer(file)
-                writer.writerow([username, encrypted_password])
+            my_query = "INSERT INTO users(name, password) VALUES ('"+ str(username) + "', '" + str(encrypted_password) + "');"
+            result = query(my_query)
             return redirect('login')
     return render_template('register.html')
 
+def query(my_query):
+    connection = mysql.connector.connect(
+      user='root',
+      password='test',
+      host='mysql',
+      port="3306",
+      database='chat-app-db')
+    print("chat-app-db connected")
+    cursor = connection.cursor()
+    cursor.execute(my_query)
+    result = cursor.fetchall()
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return result
+
+def checkUserExist(username,password):
+    my_query = "Select name, password from users;"
+    users = query(my_query)
+    if users == []:
+        return False
+    for user in users:
+        sql_name, sql_password = user
+        if(sql_name == username and decode_password(sql_password) == password):
+            return True
+    return False
+
+@server.route("/login", methods=['GET','POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        if(checkUserExist(username, password)):
+            session['username'] = username
+            return redirect('lobby')
+        else:      
+            return "wrong usernaname or password"       
+    return render_template('login.html')
+
 @server.route('/lobby', methods = ['POST','GET'])
 def lobby():
-   rooms = os.listdir('rooms/')
+   my_query = "SELECT name from rooms"
+   result = query(my_query)
+   rooms = []
+   for room in result:
+        room_name,  = room
+        rooms.append(room_name)
    if request.method == 'POST':
         new_room = request.form['new_room']
-        if (str(new_room) + '.txt') in rooms:
-            #print("exist in:" )
+        if (str(new_room)) in rooms:
             return "exist"
         else:
-            file = open('./rooms/'+ new_room +'.txt', 'w+')
-            file.close()
+            now = datetime.now()
+            username= session.get('username')
+            my_query = "INSERT INTO rooms(name, creation_date, creator_name) VALUES ('" + new_room + "', '" + str(now) + "', '" + username + "');"
+            query(my_query)
             return redirect('chat/' + new_room)
-            #return redirect('/chat/' + new_room, room=new_room)
-   all_rooms=[x[:-4] for x in rooms]
-   return render_template("lobby.html", all_rooms = all_rooms) 
+   return render_template("lobby.html", all_rooms = rooms) 
 
 @server.route('/logout', methods = ['POST','GET'])
 def logout():
     session.pop('username', None)
-    return redirect('register')  
+    return redirect('register')
 
 @server.route("/chat/<room>")
 def chat(room):
@@ -77,41 +99,26 @@ def chat(room):
 
 @server.route('/api/chat/<room>', methods = ['GET','POST'])
 def manage_chat(room):
-    file_path='./rooms/'+ room +'.txt'
     user= session.get('username')
     if user==None:
-        user="guest"
+        # user="guest"
+        return "Please register first: localhost:5000/register"
     if request.method == 'POST':
         user_mssage= request.form['msg']
-        #message in format:  [2023-08-21 11:00:11] yuval: hello
         now = datetime.now()
-        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-        full_message= '\n' + "[" + dt_string + "] " + user + ": " + user_mssage 
-        with open(file_path, 'a+') as file:
-            file.write(full_message)
-            file.close()
-    if os.path.getsize(file_path) == 0:
+        my_query= "INSERT INTO messages (room, date, user, content) VALUES ('" + room + "', '" + str(now) + "', '" + user + "', '" + user_mssage + "'); "
+        query(my_query)
+    my_query = "SELECT date, user, content from messages where room='" + room + "';"
+    all_messages = query(my_query)
+    content = ""
+    if all_messages == []:
         content = str(user) + ", No messages yet"
     else:
-        with open(file_path, 'r+') as f:
-            content = f.read() 
-            f.close()
+        for message in all_messages:
+            dateM, userM, contentM = message
+            #message in format:  [2023-08-21 11:00:11] yuval: hello
+            content += "[" + str(dateM) + "]" + str(userM) + ": " + str(contentM) + "\n"
     return content
-
-
-def chechUserExist(username,password):
-    my_query = "Select name from users where password = 1234 ;"
-    users = query_with_get(my_query)
-    for user in users:
-        if(user[0] == username and decode_password(user[1]) == password):
-            return True 
-    return False 
-#    with open('users.csv', "r") as usersExist:
-#         users=csv.reader(usersExist)
-        # for user in users:
-        #     if(user[0] == username and decode_password(user[1]) == password):
-        #         return True 
-        # return False 
 
 #encode password
 def encode_password(user_pass):
@@ -126,29 +133,6 @@ def decode_password(user_pass):
     pass_bytes = base64.b64decode(base64_bytes)
     user_pass = pass_bytes.decode('ascii')
     return user_pass
-
-def query_with_get(my_query):    
-    connection = mysql.connector.connect(
-    user='root', password='test', host='mysql', port="3306", database='db')
-    print("DB connected")
-    cursor = connection.cursor()
-    cursor.execute(my_query)
-    result = cursor.fetchall()
-    cursor.close()
-    connection.close()
-    return str(result)
-
-def query_without_get(my_query):
-    connection = mysql.connector.connect(
-    user='root', password='test', host='mysql', port="3306", database='db')
-    print("DB connected")
-    cursor = connection.cursor()
-    cursor.execute(my_query)
-    result = cursor.fetchall()
-    cursor.close()
-    connection.close()
-    return str(result)
-
     
 if __name__ == "__main__":
     server.run(host='0.0.0.0')
