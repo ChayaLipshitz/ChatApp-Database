@@ -1,14 +1,12 @@
-from flask import Flask, render_template, request, redirect, session , jsonify
+from flask import Flask, render_template, request, redirect, session
 import mysql.connector
-from mysql.connector import Error
-import csv
 import os
 import base64
 from datetime import datetime
 server = Flask(__name__)
 
 os.environ["ROOM_PATH"] = "./rooms"
-server.secret_key="123"
+server.secret_key="chatApp@Chaya_Lipshitz"
 
 
 @server.route("/", methods=['GET','POST'])
@@ -28,33 +26,6 @@ def register():
             result = query(my_query)
             return redirect('login')
     return render_template('register.html')
-
-def query(my_query):
-    connection = mysql.connector.connect(
-      user='root',
-      password='test',
-      host='mysql',
-      port="3306",
-      database='chat-app-db')
-    print("chat-app-db connected")
-    cursor = connection.cursor()
-    cursor.execute(my_query)
-    result = cursor.fetchall()
-    connection.commit()
-    cursor.close()
-    connection.close()
-    return result
-
-def checkUserExist(username,password):
-    my_query = "Select name, password from users;"
-    users = query(my_query)
-    if users == []:
-        return False
-    for user in users:
-        sql_name, sql_password = user
-        if(sql_name == username and decode_password(sql_password) == password):
-            return True
-    return False
 
 @server.route("/login", methods=['GET','POST'])
 def login():
@@ -85,7 +56,7 @@ def lobby():
             username= session.get('username')
             my_query = "INSERT INTO rooms(name, creation_date, creator_name) VALUES ('" + new_room + "', '" + str(now) + "', '" + username + "');"
             query(my_query)
-            return redirect('chat/' + new_room)
+            rooms.append(new_room)
    return render_template("lobby.html", all_rooms = rooms) 
 
 @server.route('/logout', methods = ['POST','GET'])
@@ -133,6 +104,33 @@ def decode_password(user_pass):
     pass_bytes = base64.b64decode(base64_bytes)
     user_pass = pass_bytes.decode('ascii')
     return user_pass
+
+def checkUserExist(username,password):
+    my_query = "Select name, password from users;"
+    users = query(my_query)
+    if users == []:
+        return False
+    for user in users:
+        sql_name, sql_password = user
+        if(sql_name == username and decode_password(sql_password) == password):
+            return True
+    return False
+
+def query(my_query):
+    connection = mysql.connector.connect(
+      user='root',
+      password='test',
+      host='mysql',
+      port="3306",
+      database='chat-app-db')
+    print("chat-app-db connected")
+    cursor = connection.cursor()
+    cursor.execute(my_query)
+    result = cursor.fetchall()
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return result
     
 if __name__ == "__main__":
     server.run(host='0.0.0.0')
